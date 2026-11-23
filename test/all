@@ -1,0 +1,12 @@
+#!/bin/bash
+set -euo pipefail
+root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+temp=$(mktemp -d)
+trap 'rm -f "$temp/report.json"; rmdir "$temp"' EXIT
+export PYTHONDONTWRITEBYTECODE=1
+export PRAYER_TEST_REPORT="$temp/report.json"
+python3 -B -m unittest discover -s "$root/tests" -p 'test_*.py' -v
+node "$root/tests/test_model.cjs" "$PRAYER_TEST_REPORT"
+if command -v omarchy >/dev/null; then
+  omarchy plugin validate "$root"
+fi

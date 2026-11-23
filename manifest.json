@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "mo.namaz",
+  "name": "Prayer Times",
+  "version": "1.1.0",
+  "author": "Prayer Times contributors",
+  "license": "MIT",
+  "description": "Prayer windows, sehri, iftar, sunrise and sunset with selectable location and calculation methods",
+  "kinds": ["bar-widget"],
+  "entryPoints": {"barWidget": "BarWidget.qml"},
+  "barWidget": {
+    "displayName": "Prayer Times",
+    "description": "Next prayer and a daily timetable; click Settings to change location and method",
+    "category": "Time",
+    "allowMultiple": false,
+    "defaultSection": "centerEnd",
+    "defaults": {
+      "locationMode": "auto",
+      "city": "",
+      "country": "",
+      "state": "",
+      "latitude": "",
+      "longitude": "",
+      "locationName": "",
+      "method": "auto",
+      "school": 0,
+      "highLatitude": 3,
+      "shafaq": "general",
+      "offsets": {},
+      "ishaEnd": "midnight",
+      "autoRefresh": false,
+      "hour24": false
+    }
+  }
+}

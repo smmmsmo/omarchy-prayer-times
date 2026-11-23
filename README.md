@@ -1,0 +1,45 @@
+# Prayer Times for Omarchy
+
+An optional Quickshell bar widget for daily Islamic prayers and fasting. The bar shows the time until the next prayer; the popup brings together today's five prayer windows, today's and tomorrow's fasting boundaries, sunrise, and sunset. The date uses **DD MMM YYYY** in the selected location's timezone.
+
+## Install
+
+Requires Omarchy 4.5 with the plugin bar, Python 3.11+, and system timezone data (`tzdata`). No pip packages, API key, root permissions, or changes to stock Omarchy files are required.
+
+From a checkout, copy this directory to `~/.config/omarchy/plugins/mo.namaz` (or the equivalent under `$XDG_CONFIG_HOME`). Back up an existing install before replacing it. Then run:
+
+```sh
+omarchy plugin validate "${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/mo.namaz"
+omarchy-shell shell rescanPlugins
+omarchy plugin enable mo.namaz --section centerEnd
+```
+
+Click the mosque icon. **Settings** lets you choose an approximate IP location, enter a city and country (plus an optional state/region), or specify exact decimal coordinates. **Refresh** makes an explicit network request. **Automatic fetching** is off for new installations and can be enabled in Settings. Right-click the widget to open Settings; middle-click to refresh. Move it using `omarchy bar move mo.namaz`.
+
+## Calculation options
+
+- AlAdhan's location-based recommendation or one of 23 named methods, including Karachi, ISNA, MWL, Umm al-Qura, Moonsighting Committee, Tehran and Jaʿfari.
+- Standard or Hanafi Asr, four high-latitude options, and Moonsighting Committee twilight selection.
+- Per-prayer offsets from −30 to +30 minutes. Use only to match a trusted local timetable.
+- Isha end at the midpoint from sunset to next Fajr, or at next Fajr as an outer limit.
+- 12-hour and 24-hour time, live locale formatting, and English, Bengali, and Arabic UI catalogs. Other languages fall back to English.
+
+Dates, DST, and rollover use the chosen location rather than the computer's timezone. The timetable distinguishes Fajr (suhoor cutoff) from sunrise, and Maghrib (iftar) from astronomical sunset. These are calculated boundaries, **not mosque congregation times or religious rulings**. The end column does not reflect every school's jurisprudence; verify with a local mosque or prayer authority, especially during Ramadan. Polar-day/night gaps are shown as `—`, not substituted with guessed fasting times.
+
+## Privacy and reliability
+
+Only two fixed HTTPS services are used: `geo.omarchy.org` in IP mode, and `api.aladhan.com` for timings. The latter receives the chosen city/region/country or coordinates and calculation settings. IP geolocation is approximate, especially on VPNs. Location details are not shared by this plugin with other services.
+
+With automatic fetching enabled, an internal check runs every 15 minutes; cached daily schedules are reused and IP location is reused for up to an hour. Settings, startup, and the location's midnight can also trigger checks. **Refresh** bypasses today's and tomorrow's timetable cache. With automatic fetching off, background checks are cache-only.
+
+Cached data is stored under `${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/namaz/v2`. Cache output is bounded and written atomically; a second following day is prefetched so an offline session can roll across midnight. Cached timetables are labeled and only used for the matching configuration and date. No old city is displayed as a newly chosen city.
+
+## Development
+
+```sh
+./test/all
+```
+
+Tests need Python, timezone data, and Node.js, and run without network access. Omarchy's manifest validator also runs when installed. The CI workflow exercises supported Python versions. See [submission notes](SUBMISSION.md) for the upstream handoff and manual UI checks.
+
+To remove the widget, use `omarchy plugin disable mo.namaz`. To update an existing Git-managed install once published, use `omarchy plugin update mo.namaz`.
