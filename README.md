@@ -4,17 +4,31 @@ An optional Quickshell bar widget for daily Islamic prayers and fasting. The bar
 
 ## Install
 
-Requires Omarchy 4.5 with the plugin bar, Python 3.11+, and system timezone data (`tzdata`). No pip packages, API key, root permissions, or changes to stock Omarchy files are required.
+Requires Omarchy 4.5 with the Quattro bar, Python 3.11+, and system timezone data (`tzdata`). No pip packages, API key, elevated permissions, or changes to stock Omarchy files are required.
 
-From a checkout, copy this directory to `~/.config/omarchy/plugins/mo.namaz` (or the equivalent under `$XDG_CONFIG_HOME`). Back up an existing install before replacing it. Then run:
+Review the source before enabling this plugin. Omarchy plugins run with your user permissions, not in a sandbox. Install using Omarchy's normal confirmation and placement prompts:
 
 ```sh
-omarchy plugin validate "${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/mo.namaz"
-omarchy-shell shell rescanPlugins
-omarchy plugin enable mo.namaz --section centerEnd
+omarchy plugin add https://github.com/smmmsmo/omarchy-prayer-times.git --enable
 ```
 
-Click the mosque icon. **Settings** lets you choose an approximate IP location, enter a city and country (plus an optional state/region), or specify exact decimal coordinates. **Refresh** makes an explicit network request. **Automatic fetching** is off for new installations and can be enabled in Settings. Right-click the widget to open Settings; middle-click to refresh. Move it using `omarchy bar move mo.namaz`.
+Click the mosque icon, open **Settings**, and choose an approximate IP location, a city and country (plus an optional state/region), or exact decimal coordinates. Choose **Apply settings**, then **Refresh** to fetch the timetable. For less location sharing, use a city instead of exact coordinates or IP lookup. **Automatic fetching** is off for new installations. Right-click the widget for Settings; middle-click to refresh. Move it with `omarchy bar move mo.namaz`.
+
+## Update or remove
+
+```sh
+omarchy plugin update mo.namaz   # Update a Git-managed install
+omarchy plugin disable mo.namaz # Hide it without uninstalling
+omarchy plugin remove mo.namaz  # Disable and uninstall via Omarchy's confirmation prompt
+```
+
+After removal, Omarchy leaves separately stored timetable data alone. To erase this plugin's cache too, inspect and confirm removal of the dedicated cache directory:
+
+```sh
+rm -ri -- "${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/namaz"
+```
+
+These commands do not remove unrelated bar widgets or Omarchy settings.
 
 ## Calculation options
 
@@ -28,11 +42,13 @@ Dates, DST, and rollover use the chosen location rather than the computer's time
 
 ## Privacy and reliability
 
-Only two fixed HTTPS services are used: `geo.omarchy.org` in IP mode, and `api.aladhan.com` for timings. The latter receives the chosen city/region/country or coordinates and calculation settings. IP geolocation is approximate, especially on VPNs. Location details are not shared by this plugin with other services.
+No analytics, telemetry, accounts, background service, or API key. The plugin does not request GPS access. Only two fixed HTTPS services are used: `geo.omarchy.org` in IP mode, which sees the request's IP and returns an approximate location, and `api.aladhan.com` for timings. Each request exposes its source IP to the destination; AlAdhan also receives the selected city/region/country or coordinates and calculation settings, but not the optional location label or local offsets. IP mode rounds the returned coordinates before sending them to AlAdhan. City and coordinate modes skip the IP lookup entirely.
 
 With automatic fetching enabled, an internal check runs every 15 minutes; cached daily schedules are reused and IP location is reused for up to an hour. Settings, startup, and the location's midnight can also trigger checks. **Refresh** bypasses today's and tomorrow's timetable cache. With automatic fetching off, background checks are cache-only.
 
-Cached data is stored under `${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/namaz/v2`. Cache output is bounded and written atomically; a second following day is prefetched so an offline session can roll across midnight. Cached timetables are labeled and only used for the matching configuration and date. No old city is displayed as a newly chosen city.
+Location and calculation preferences are saved only when you choose **Apply settings**, in the widget's entry in Omarchy's local `shell.json`. The helper receives settings via standard input rather than command-line arguments. Don't commit or share your personal `shell.json` without reviewing it first.
+
+The local cache under `${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/namaz/v2` keeps validated times, timezone, method, and (in IP mode only) the approximate location needed to reuse those times. New entries omit raw provider metadata and do not duplicate a manually entered location. Cache files are written privately and atomically. Entries older than seven days are ignored and pruned during online refresh; you can delete the cache at any time using the removal steps. A future day is prefetched so the timetable can roll over offline. Cached times are labeled and only shown for the matching location, settings, and date.
 
 ## Development
 
@@ -40,6 +56,4 @@ Cached data is stored under `${XDG_CACHE_HOME:-$HOME/.cache}/omarchy/namaz/v2`. 
 ./test/all
 ```
 
-Tests need Python, timezone data, and Node.js, and run without network access. Omarchy's manifest validator also runs when installed. The CI workflow exercises supported Python versions. See [submission notes](SUBMISSION.md) for the upstream handoff and manual UI checks.
-
-To remove the widget, use `omarchy plugin disable mo.namaz`. To update an existing Git-managed install once published, use `omarchy plugin update mo.namaz`.
+Tests need Python, timezone data, and Node.js, and run without network access. Omarchy's manifest validator also runs when installed. The CI workflow exercises supported Python versions. See [submission notes](SUBMISSION.md) for the marketplace handoff and manual UI checks.

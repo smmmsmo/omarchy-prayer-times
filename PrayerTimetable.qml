@@ -28,6 +28,14 @@ Column {
     focusable: true
     onClicked: root.host.editing = true
   }
+  PlainLabel {
+    width: parent.width
+    visible: !root.usable && root.report && root.report.error === "offline"
+    text: root.translations.t("refreshPrivacy")
+    wrapMode: Text.WordWrap
+    font.pixelSize: Commons.Style.font.caption
+    opacity: 0.75
+  }
   Column {
     width: parent.width
     visible: root.usable

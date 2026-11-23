@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import signal
+import sys
 import tempfile
 import time
 import unicodedata
@@ -19,6 +20,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 SCHEMA = 2
 MAX_BYTES = 131072
+MAX_SETTINGS_BYTES = 8192
+CACHE_RETENTION_SECONDS = 7 * 86400
 METHODS = {0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23}
 PRAYERS = ("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha")
 KEYS = ("Fajr", "Sunrise", "Dhuhr", "Asr", "Sunset", "Maghrib", "Isha")
@@ -109,6 +112,8 @@ def config(raw):
 def read_cache(name):
     try:
         with (CACHE / (name + ".json")).open("rb") as source:
+            if time.time() - os.fstat(source.fileno()).st_mtime > CACHE_RETENTION_SECONDS:
+                return None
             raw = source.read(MAX_BYTES + 1)
         return json.loads(raw) if len(raw) <= MAX_BYTES else None
     except (OSError, ValueError):
@@ -134,11 +139,12 @@ def write_cache(name, data):
 
 def prune_cache():
     try:
-        paths = sorted((p for p in CACHE.glob("*.json")
-                        if re.fullmatch(r"(?:state-)?[a-f0-9]{24}\.json|location\.json", p.name)),
-                       key=lambda p: p.stat().st_mtime, reverse=True)
-        for path in paths[192:]:
-            path.unlink(missing_ok=True)
+        cutoff = time.time() - CACHE_RETENTION_SECONDS
+        paths = [(p.stat().st_mtime, p) for p in CACHE.glob("*.json")
+                 if re.fullmatch(r"(?:state-)?[a-f0-9]{24}\.json|location\.json", p.name)]
+        for index, (modified, path) in enumerate(sorted(paths, reverse=True)):
+            if index >= 64 or modified < cutoff:
+                path.unlink(missing_ok=True)
     except OSError:
         pass
 
@@ -157,6 +163,9 @@ def location(force=False):
     except EXPECTED:
         pass
     result = coordinates(fetch_json("https://geo.omarchy.org/"))
+    # IP-based locations are approximate; city-level precision suffices.
+    for key in ("latitude", "longitude"):
+        result[key] = round(result[key], 2)
     write_cache("location", {"fetched": time.time(), "location": result})
     return result
 
@@ -234,13 +243,30 @@ def day_url(cfg, place, date):
     return f"https://api.aladhan.com/v1/{endpoint}/{date:%d-%m-%Y}?" + urlencode(query)
 
 
+def timetable_cache_payload(day):
+    """Keep the validated schedule, not echoed coordinates or API metadata."""
+    tz = ZoneInfo(day["timezone"])
+    return {"code": 200, "data": {
+        "date": {"gregorian": {"date": dt.date.fromisoformat(day["date"]).strftime("%d-%m-%Y")}},
+        "meta": {"timezone": day["timezone"], "method": {"id": day["method"]}},
+        "timings": {key: dt.datetime.fromtimestamp(moment, tz).isoformat() if moment is not None else None
+                    for key, moment in day["times"].items()},
+    }}
+
+
 def get_day(cfg, place, date, force=False, offline=False):
     url = day_url(cfg, place, date)
     key = hashlib.sha256(url.encode()).hexdigest()[:24]
     raw = read_cache(key)
     if raw is not None and not force:
         try:
-            return parse_day(raw, date)
+            result = parse_day(raw, date)
+            if cfg["method"] != "auto" and result["method"] != cfg["method"]:
+                raise DataError("response")
+            minimal = timetable_cache_payload(result)
+            if raw != minimal:
+                write_cache(key, minimal)
+            return result
         except EXPECTED:
             pass
     if offline:
@@ -249,7 +275,7 @@ def get_day(cfg, place, date, force=False, offline=False):
     result = parse_day(raw, date)
     if cfg["method"] != "auto" and result["method"] != cfg["method"]:
         raise DataError("response")
-    write_cache(key, raw)
+    write_cache(key, timetable_cache_payload(result))
     return result
 
 
@@ -318,15 +344,27 @@ def state_key(cfg):
     return "state-" + hashlib.sha256(json.dumps(cfg, sort_keys=True).encode()).hexdigest()[:24]
 
 
+def chosen_place(cfg):
+    if cfg["locationMode"] == "coordinates":
+        return {"latitude": cfg["latitude"], "longitude": cfg["longitude"], "name": cfg["locationName"]}
+    return {}
+
+
+def display_location(cfg, place):
+    if cfg["locationMode"] == "manual":
+        return ", ".join(filter(None, (cfg["city"], cfg["state"], cfg["country"])))
+    return place["name"] or f'{place["latitude"]:.4f}, {place["longitude"]:.4f}'
+
+
 def cached_report(cfg, now=None):
     state = read_cache(state_key(cfg))
     if not isinstance(state, dict) or state.get("schema") != SCHEMA:
         raise DataError("offline")
     tz = ZoneInfo(state["timezone"])
     date = (now or dt.datetime.now(tz)).astimezone(tz).date()
-    place = coordinates(state["place"]) if cfg["locationMode"] != "manual" else {}
+    place = coordinates(state["place"]) if cfg["locationMode"] == "auto" else chosen_place(cfg)
     days = [get_day(cfg, place, date + dt.timedelta(days=i), offline=True) for i in (0, 1)]
-    result = make_report(cfg, days, clean(state["name"], 304), now)
+    result = make_report(cfg, days, display_location(cfg, place), now)
     result.update(offline=True, fetchedAt=state["fetchedAt"])
     return result
 
@@ -335,24 +373,17 @@ def run(cfg, force=False, offline=False):
     failure = "offline"
     if not offline:
         try:
-            if cfg["locationMode"] == "auto":
-                place = location(force)
-            elif cfg["locationMode"] == "coordinates":
-                place = {"latitude": cfg["latitude"], "longitude": cfg["longitude"], "name": cfg["locationName"]}
-            else:
-                place = {}
-            name = (", ".join(filter(None, (cfg["city"], cfg["state"], cfg["country"])))
-                    if cfg["locationMode"] == "manual" else place["name"]
-                    or f'{place["latitude"]:.4f}, {place["longitude"]:.4f}')
+            place = location(force) if cfg["locationMode"] == "auto" else chosen_place(cfg)
             # One probe learns the destination timezone. No computer timezone or
             # DST assumptions enter the selected-place date calculation.
             probe = get_day(cfg, place, dt.datetime.now(dt.timezone.utc).date(), force)
             date = dt.datetime.now(ZoneInfo(probe["timezone"])).date()
             days = [probe if probe["date"] == (date + dt.timedelta(days=i)).isoformat()
                     else get_day(cfg, place, date + dt.timedelta(days=i), force) for i in (0, 1)]
-            result = make_report(cfg, days, name)
-            state = {"schema": SCHEMA, "place": place, "name": name,
-                     "timezone": result["timezone"], "fetchedAt": int(time.time())}
+            result = make_report(cfg, days, display_location(cfg, place))
+            state = {"schema": SCHEMA, "timezone": result["timezone"], "fetchedAt": int(time.time())}
+            if cfg["locationMode"] == "auto":
+                state["place"] = place
             result["fetchedAt"] = state["fetchedAt"]
             result["cacheWritable"] = write_cache(state_key(cfg), state)
             # Prefetch the second following day so a cached session can roll
@@ -381,21 +412,25 @@ def timed_out(signum, frame):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", required=True, help="JSON settings, not a path")
-    parser.add_argument("--force", action="store_true", help="Bypass network caches")
+    parser.add_argument("--force", action="store_true", help="Bypass network caches (settings are read from stdin)")
     parser.add_argument("--offline", action="store_true", help="Never access the network")
     args = parser.parse_args()
     signal.signal(signal.SIGALRM, timed_out)
     signal.alarm(40)  # Bound slow reads AND contention between monitor instances.
     lock = None
     try:
-        cfg = config(json.loads(args.config))
-        try:
-            CACHE.mkdir(parents=True, exist_ok=True, mode=0o700)
-            lock = (CACHE / ".fetch.lock").open("a")
-            fcntl.flock(lock, fcntl.LOCK_EX)
-        except OSError:
-            pass
+        raw = sys.stdin.buffer.readline(MAX_SETTINGS_BYTES + 1)
+        if len(raw) > MAX_SETTINGS_BYTES:
+            raise DataError("settings")
+        cfg = config(json.loads(raw))
+        if not args.offline:
+            try:
+                CACHE.mkdir(parents=True, exist_ok=True, mode=0o700)
+                lock = (CACHE / ".fetch.lock").open("a")
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                prune_cache()
+            except OSError:
+                pass
         result = run(cfg, args.force, args.offline)
     except TimeoutError:
         try:

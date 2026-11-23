@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from urllib.request import Request
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -234,6 +235,42 @@ class BackendTests(unittest.TestCase):
         (b.CACHE / "large.json").write_bytes(b" " * (b.MAX_BYTES + 1))
         self.assertIsNone(b.read_cache("large"))
 
+    def test_cache_omits_unneeded_response_metadata(self):
+        raw = response()
+        raw["data"]["meta"].update(latitude=23.1234567, longitude=90.7654321)
+        raw["data"]["date"]["hijri"] = {"private-test-marker": True}
+        with patch.object(b, "fetch_json", return_value=raw):
+            parsed = b.get_day(self.cfg, {}, DAY)
+        stored = next(b.CACHE.glob("*.json"))
+        compact = json.loads(stored.read_text())
+        self.assertEqual(set(compact["data"]["meta"]), {"timezone", "method"})
+        self.assertNotIn("hijri", compact["data"]["date"])
+        self.assertEqual(b.parse_day(compact, DAY), parsed)
+
+    def test_expired_cache_is_not_read_and_prune_is_scoped(self):
+        expired = b.CACHE / ("a" * 24 + ".json")
+        unrelated = b.CACHE / "other.json"
+        expired.write_text("{}")
+        unrelated.write_text("{}")
+        for entry in (expired, unrelated):
+            os.utime(entry, (1, 1))
+        self.assertIsNone(b.read_cache("a" * 24))
+        b.prune_cache()
+        self.assertFalse(expired.exists())
+        self.assertTrue(unrelated.exists())
+
+    def test_exact_coordinates_are_not_duplicated_in_cache_state(self):
+        cfg = b.config({"locationMode": "coordinates", "latitude": 23.1234567,
+                        "longitude": 90.7654321, "locationName": "Private label"})
+        with patch.object(b, "fetch_json", side_effect=lambda url: response(
+                dt.datetime.strptime(url.split("?")[0].rsplit("/", 1)[1], "%d-%m-%Y").date()
+        )):
+            result = b.run(cfg)
+        self.assertTrue(result["ok"])
+        state = b.read_cache(b.state_key(cfg))
+        self.assertEqual(set(state), {"schema", "timezone", "fetchedAt"})
+        self.assertEqual(b.cached_report(cfg)["location"], "Private label")
+
     def test_ip_response_validation(self):
         with patch.object(b, "fetch_json", return_value={"latitude": "NaN", "longitude": 0}):
             with self.assertRaises(ValueError):
@@ -242,6 +279,12 @@ class BackendTests(unittest.TestCase):
             self.assertEqual(b.location()["name"], "Null Island")
             self.assertEqual(b.location()["latitude"], 0)
             self.assertEqual(fetch.call_count, 1)
+
+    def test_ip_coordinates_are_rounded_before_reuse(self):
+        with patch.object(b, "fetch_json", return_value={"latitude": 12.3456, "longitude": -34.5678}):
+            result = b.location(force=True)
+        self.assertEqual((result["latitude"], result["longitude"]), (12.35, -34.57))
+        self.assertEqual(b.read_cache("location")["location"], result)
 
     def test_offline_never_requests_network(self):
         with patch.object(b, "fetch_json") as fetch:
@@ -272,12 +315,27 @@ class BackendTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 b.fetch_json(url)
 
+    def test_redirect_cannot_forward_location_outside_original_https_host(self):
+        req = Request("https://api.aladhan.com/first?latitude=12&longitude=34")
+        for url in ("https://geo.omarchy.org/other", "https://elsewhere.invalid/", "http://api.aladhan.com/"):
+            with self.assertRaises(ValueError):
+                b.SafeRedirect().redirect_request(req, None, 302, "", {}, url)
+
     def test_cli_bad_settings_is_structured_json(self):
-        result = subprocess.run([sys.executable, "-B", str(ROOT / "fetch.py"), "--config", "[]"],
+        result = subprocess.run([sys.executable, "-B", str(ROOT / "fetch.py")], input="[]\n",
                                 capture_output=True, text=True, timeout=5)
         self.assertEqual(result.returncode, 0)
         self.assertEqual(json.loads(result.stdout)["error"], "settings")
         self.assertEqual(result.stderr, "")
+
+    def test_cli_bounds_stdin_and_offline_does_not_create_cache(self):
+        child_cache = b.CACHE / "new-xdg-cache"
+        env = dict(os.environ, XDG_CACHE_HOME=str(child_cache))
+        for text, expected in (("{}\n", "offline"), (" " * (b.MAX_SETTINGS_BYTES + 1), "settings")):
+            result = subprocess.run([sys.executable, "-B", str(ROOT / "fetch.py"), "--offline"], input=text,
+                                    capture_output=True, text=True, timeout=5, env=env)
+            self.assertEqual(json.loads(result.stdout)["error"], expected)
+        self.assertFalse(child_cache.exists())
 
     def test_contract_fixture(self):
         output = os.environ.get("PRAYER_TEST_REPORT")

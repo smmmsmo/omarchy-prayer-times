@@ -6,6 +6,7 @@
   "inDuration": "in %1",
   "fasting": "FASTING · TODAY",
   "configure": "Configure prayer times",
+  "refreshPrivacy": "Refresh contacts AlAdhan using the selected city or coordinates. IP mode first looks up your approximate location. Choose a city in Settings to skip the IP lookup.",
   "apply": "Apply settings",
   "cancel": "Cancel",
   "tab.location": "Location",

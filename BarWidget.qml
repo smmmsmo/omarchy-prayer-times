@@ -83,7 +83,8 @@ Ui.BarWidget {
     activeKey = requestKey
     pendingResult = null
     var helper = decodeURIComponent(Qt.resolvedUrl("fetch.py").toString().replace(/^file:\/\//, ""))
-    var args = ["python3", "-B", helper, "--config", activeKey]
+    // Settings can contain exact coordinates. Pass them on stdin, not argv.
+    var args = ["python3", "-B", helper]
     if (force) args.push("--force")
     else if (!root.setting("autoRefresh", false)) args.push("--offline")
     fetcher.command = args
@@ -93,6 +94,8 @@ Ui.BarWidget {
 
   onRequestKeyChanged: {
     report = null
+    pendingRefresh = false
+    pendingForce = false
     if (!root.setting("autoRefresh", false) && fetcher.running) fetcher.running = false
     settingsDebounce.restart()
   }
@@ -117,6 +120,8 @@ Ui.BarWidget {
   }
   Process {
     id: fetcher
+    stdinEnabled: true
+    onStarted: fetcher.write(root.activeKey + "\n")
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
