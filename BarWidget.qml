@@ -10,7 +10,7 @@ import "Model.js" as Model
 
 Ui.BarWidget {
   id: root
-  moduleName: "mo.namaz" // Stable ID: existing installations keep their settings.
+  moduleName: "mo.prayer"
   Commons.Translations { id: strings; directory: Qt.resolvedUrl("i18n") }
   property var report: null
   property var pendingResult: null

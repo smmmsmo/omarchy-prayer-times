@@ -12,14 +12,16 @@ Review the source before enabling this plugin. Omarchy plugins run with your use
 omarchy plugin add https://github.com/smmmsmo/omarchy-prayer-times.git --enable
 ```
 
-Click the mosque icon, open **Settings**, and choose an approximate IP location, a city and country (plus an optional state/region), or exact decimal coordinates. Choose **Apply settings**, then **Refresh** to fetch the timetable. For less location sharing, use a city instead of exact coordinates or IP lookup. **Automatic fetching** is off for new installations. Right-click the widget for Settings; middle-click to refresh. Move it with `omarchy bar move mo.namaz`.
+Click the mosque icon, open **Settings**, and choose an approximate IP location, a city and country (plus an optional state/region), or exact decimal coordinates. Choose **Apply settings**, then **Refresh** to fetch the timetable. For less location sharing, use a city instead of exact coordinates or IP lookup. **Automatic fetching** is off for new installations. Right-click the widget for Settings; middle-click to refresh. Move it with `omarchy bar move mo.prayer`.
+
+**Upgrading from `mo.namaz` (1.1.2 or earlier):** Omarchy treats the new ID as a separate plugin. Note your current widget settings, remove the old copy with `omarchy plugin remove mo.namaz`, and then run the install command above. Reapply any settings you want to keep. Don't use `omarchy plugin update mo.namaz` to switch IDs.
 
 ## Update or remove
 
 ```sh
-omarchy plugin update mo.namaz   # Update a Git-managed install
-omarchy plugin disable mo.namaz # Hide it without uninstalling
-omarchy plugin remove mo.namaz  # Disable and uninstall via Omarchy's confirmation prompt
+omarchy plugin update mo.prayer  # Update a Git-managed install
+omarchy plugin disable mo.prayer # Hide it without uninstalling
+omarchy plugin remove mo.prayer  # Disable and uninstall via Omarchy's confirmation prompt
 ```
 
 After removal, Omarchy leaves separately stored timetable data alone. To erase this plugin's cache too, inspect and confirm removal of the dedicated cache directory:
