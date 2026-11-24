@@ -12,13 +12,8 @@ The plugin uses the existing bar-widget manifest and UI kit; no changes to Omarc
 
 ## Reviewer checklist
 
-- Run `./test/all` and `omarchy plugin validate .`.
-- Test that a new install makes no network requests until Refresh or automatic fetching is enabled.
-- Open the card on a horizontal and vertical bar; confirm the mosque icon is legible at both sizes and uses theme foreground.
-- Switch between IP, city and coordinates. Confirm Apply persists and Cancel leaves settings unchanged.
-- Verify a remote location whose civil date differs from the computer's. Verify a date with a single-digit day renders `05 Jan 2027`.
-- Try a DST boundary and a high-latitude summer timetable; confirm missing events do not produce a fasting time.
-- Switch to Arabic and verify label/layout mirroring; switch to Bengali and confirm digits and translated labels.
-- Review calculated time disclaimers and API disclosure; confirm no default bar entry will be installed upstream.
+- Run `./test/all` and `omarchy plugin validate .` on Omarchy.
+- Follow the [Quattro manual checks](docs/development.md#manual-checks-on-quattro), including first-run network behavior, display and settings, timezone edge cases, and locale rendering.
+- Check the [screenshots](README.md#screenshots), calculated-time disclaimers, and API disclosure. Confirm no default bar entry will be installed upstream.
 
 Publishing the standalone plugin on GitHub does not submit it to Omarchy upstream.
