@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "mo.namaz",
   "name": "Prayer Times",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "author": "Prayer Times contributors",
   "license": "MIT",
   "description": "Prayer windows, sehri, iftar, sunrise and sunset with selectable location and calculation methods",
@@ -13,7 +13,7 @@
     "description": "Next prayer and a daily timetable; click Settings to change location and method",
     "category": "Time",
     "allowMultiple": false,
-    "defaultSection": "centerEnd",
+    "defaultSection": "center",
     "defaults": {
       "locationMode": "auto",
       "city": "",
